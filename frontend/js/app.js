@@ -26,6 +26,24 @@ function api(path, options) {
   });
 }
 
+/* ---------------- 页面切换过渡 ----------------
+   点击站内导航时先淡出（page-leaving）再跳转，新页面加载时自动淡入。
+   （style.css 中 body 自带 page-in 动画） */
+document.addEventListener("click", (e) => {
+  const link = e.target.closest('a[href]');
+  if (!link) return;
+  const href = link.getAttribute("href");
+  // 仅拦截站内页面跳转
+  if (!href || href.startsWith("#") || href.startsWith("javascript:") || href.includes("://")) return;
+  const cur = window.location.pathname.replace(/^\//, "");
+  if (href === cur) return; // 点击的是当前页，不拦截
+  e.preventDefault();
+  document.body.classList.add("page-leaving");
+  setTimeout(() => {
+    window.location.href = link.href;
+  }, 220);
+});
+
 /* ---------------- 工具：头像颜色 ---------------- */
 const AVATAR_COLORS = ["#0084ff", "#e8b339", "#f1403c", "#6bc96b", "#9b6cea", "#12b7a3", "#e07b39"];
 

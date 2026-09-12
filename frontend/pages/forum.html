@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>讨论区 · 校园搭子</title>
+  <link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+  <header class="nav">
+    <div class="nav-inner">
+      <a class="logo" href="../index.html">校园<span class="logo-suffix">搭子</span></a>
+      <div class="search">
+        <input type="text" placeholder="搜索课程、话题、搭子…" />
+        <button>搜索</button>
+      </div>
+      <nav class="nav-links">
+        <a href="../index.html">首页</a>
+        <a href="requests.html">搭子广场</a>
+        <a href="forum.html" class="active">讨论区</a>
+        <a href="me.html">我的</a>
+        <button class="btn btn-primary">提问</button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="page">
+    <section class="main-col">
+      <!-- 发帖入口 -->
+      <div class="card">
+        <div class="card-body" style="display:flex;gap:12px;align-items:center">
+          <span class="avatar">浮</span>
+          <input type="text" style="flex:1;height:36px;border:1px solid var(--color-border);border-radius:4px;padding:0 12px"
+            placeholder="分享你的学习经验、校园资讯或用AI发起提问…" />
+          <button class="btn btn-primary">提问</button>
+        </div>
+      </div>
+
+      <div class="channel-tabs">
+        <button class="tab active" data-channel="all">推荐</button>
+        <button class="tab" data-channel="搭子">搭子</button>
+        <button class="tab" data-channel="课程">课程</button>
+        <button class="tab" data-channel="竞赛">竞赛</button>
+        <button class="tab" data-channel="生活">生活</button>
+      </div>
+
+      <div class="card" data-feed></div>
+    </section>
+
+    <aside class="side-col">
+      <div class="card">
+        <div class="card-title">热门话题</div>
+        <ul class="rank-list" data-hot></ul>
+      </div>
+    </aside>
+  </main>
+
+  <footer class="footer">校园搭子 · 知乎黑客松 2026 Demo</footer>
+  <script src="../js/app.js"></script>
+</body>
+</html>

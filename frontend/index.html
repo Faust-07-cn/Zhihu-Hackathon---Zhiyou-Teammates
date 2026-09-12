@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>校园搭子 · 首页</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <!-- 顶部导航 -->
+  <header class="nav">
+    <div class="nav-inner">
+      <span class="logo">校园<span class="logo-suffix">搭子</span></span>
+      <div class="search">
+        <input type="text" placeholder="搜索课程、话题、搭子…" />
+        <button>搜索</button>
+      </div>
+      <nav class="nav-links">
+        <a href="index.html" class="active">首页</a>
+        <a href="pages/requests.html">搭子广场</a>
+        <a href="pages/forum.html">讨论区</a>
+        <a href="pages/me.html">我的</a>
+        <button class="btn btn-primary">提问</button>
+        <a class="nav-avatar" href="pages/me.html">浮</a>
+      </nav>
+    </div>
+  </header>
+
+  <!-- 主体两栏 -->
+  <main class="page">
+    <!-- 左：内容流 -->
+    <section class="main-col">
+      <!-- 搭子频道：真实匹配推荐，置顶展示 -->
+      <div class="card" data-home-match style="display:none">
+        <div class="card-title">为你推荐搭子</div>
+        <div class="card-body">
+          <div data-home-match-list></div>
+          <a class="btn btn-ghost" href="pages/requests.html" style="display:block;text-align:center;margin-top:12px">去搭子广场发布/响应请求 →</a>
+        </div>
+      </div>
+
+      <div class="card" data-feed></div>
+    </section>
+
+    <!-- 右：信息栏 -->
+    <aside class="side-col">
+      <div class="card identity-card" data-identity></div>
+
+      <div class="card">
+        <div class="card-title">给你推荐的搭子</div>
+        <div class="card-body">
+          <div data-partners></div>
+          <a class="btn btn-ghost" href="pages/requests.html" style="display:block;text-align:center;margin-top:12px">去搭子广场 →</a>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">校园热议</div>
+        <ul class="rank-list" data-hot></ul>
+      </div>
+    </aside>
+  </main>
+
+  <footer class="footer">
+    校园搭子 · 知乎黑客松 2026 校园新锐季 Demo
+  </footer>
+
+  <script src="js/app.js"></script>
+</body>
+</html>

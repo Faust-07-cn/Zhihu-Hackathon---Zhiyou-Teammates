@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>搭子广场 · 校园搭子</title>
+  <link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+  <header class="nav">
+    <div class="nav-inner">
+      <a class="logo" href="../index.html">校园<span class="logo-suffix">搭子</span></a>
+      <div class="search">
+        <input type="text" placeholder="搜索课程、话题、搭子…" />
+        <button>搜索</button>
+      </div>
+      <nav class="nav-links">
+        <a href="../index.html">首页</a>
+        <a href="requests.html" class="active">搭子广场</a>
+        <a href="forum.html">讨论区</a>
+        <a href="me.html">我的</a>
+        <button class="btn btn-primary">提问</button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="page">
+    <section class="main-col">
+      <!-- 顶部：发布入口 + 筛选 -->
+      <div class="card">
+        <div class="card-body" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+          <div style="font-size:16px;font-weight:600">搭子广场 · 大家正在求</div>
+          <button class="btn btn-primary" data-open-publish>发布搭子请求</button>
+        </div>
+        <div class="card-body" style="padding-top:0">
+          <div class="channel-tabs" data-req-tabs style="margin-bottom:12px">
+            <span class="tab active" data-req-type="">全部</span>
+            <span class="tab" data-req-type="interest">兴趣搭子</span>
+            <span class="tab" data-req-type="study">学习搭子</span>
+            <span class="tab" data-req-type="project">项目搭子</span>
+          </div>
+          <div class="purpose-tags" data-req-purposes>
+            <span class="purpose-tag" data-req-purpose="竞赛组队">竞赛组队</span>
+            <span class="purpose-tag" data-req-purpose="结伴学习">结伴学习</span>
+            <span class="purpose-tag" data-req-purpose="考研搭子">考研搭子</span>
+            <span class="purpose-tag" data-req-purpose="兴趣交流">兴趣交流</span>
+            <span class="purpose-tag" data-req-purpose="日常陪伴">日常陪伴</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 广场 / 我的请求 tab -->
+      <div class="card">
+        <div class="card-title" style="display:flex;gap:20px">
+          <span class="tab-switch active" data-req-tab="square">广场</span>
+          <span class="tab-switch" data-req-tab="mine">我的请求</span>
+        </div>
+        <div class="card-body">
+          <!-- 广场列表 -->
+          <div data-request-list></div>
+          <!-- 我的请求 -->
+          <div data-my-requests style="display:none"></div>
+        </div>
+      </div>
+    </section>
+
+    <aside class="side-col">
+      <div class="card">
+        <div class="card-title">怎么玩？</div>
+        <div class="card-body" style="color:var(--color-text-secondary);line-height:1.9">
+          1. <b style="color:var(--color-text)">发布</b>：写下你想找什么样的搭子<br />
+          2. <b style="color:var(--color-text)">意向</b>：看到合适的请求点"我有意向"<br />
+          3. <b style="color:var(--color-text)">接受</b>：发布者从意向中选人接受，即成组<br />
+          广场按<b style="color:var(--color-text)">匹配度</b>排序，越高越适合你
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <!-- 发布请求模态框 -->
+  <div class="modal-mask" data-publish-modal style="display:none">
+    <div class="modal">
+      <div class="modal-title">发布搭子请求</div>
+      <div class="modal-body">
+        <div class="form-item">
+          <label>标题</label>
+          <input class="form-input" data-pub-title placeholder="如：数学建模美赛找队友" />
+        </div>
+        <div class="form-item">
+          <label>搭子类型</label>
+          <div class="type-cards" data-pub-types>
+            <div class="type-card" data-type="interest">
+              <div class="type-title">兴趣搭子</div>
+              <div class="type-desc">按兴趣标签匹配</div>
+            </div>
+            <div class="type-card" data-type="study">
+              <div class="type-title">学习搭子</div>
+              <div class="type-desc">课程 / 学习方向</div>
+            </div>
+            <div class="type-card active" data-type="project">
+              <div class="type-title">项目搭子</div>
+              <div class="type-desc">竞赛组队等场景</div>
+            </div>
+          </div>
+        </div>
+        <div class="form-item">
+          <label>目的（可多选）</label>
+          <div class="purpose-tags" data-pub-purposes>
+            <span class="purpose-tag" data-purpose="竞赛组队">竞赛组队</span>
+            <span class="purpose-tag" data-purpose="结伴学习">结伴学习</span>
+            <span class="purpose-tag" data-purpose="考研搭子">考研搭子</span>
+            <span class="purpose-tag" data-purpose="兴趣交流">兴趣交流</span>
+            <span class="purpose-tag" data-purpose="日常陪伴">日常陪伴</span>
+          </div>
+        </div>
+        <div class="form-item">
+          <label>标签（逗号分隔）</label>
+          <input class="form-input" data-pub-tags placeholder="如：数学建模, 论文写作" />
+        </div>
+        <div class="form-item">
+          <label>描述</label>
+          <textarea class="form-input" data-pub-desc rows="3" placeholder="想找什么样的搭子、时间投入等"></textarea>
+        </div>
+        <div class="form-item">
+          <label>是否需要问卷筛选</label>
+          <div style="display:flex;align-items:center;gap:16px">
+            <label style="display:flex;align-items:center;gap:5px;cursor:pointer">
+              <input type="radio" name="need_questionnaire" value="false" checked /> 不需要
+            </label>
+            <label style="display:flex;align-items:center;gap:5px;cursor:pointer">
+              <input type="radio" name="need_questionnaire" value="true" /> 需要
+            </label>
+          </div>
+          <div id="questionnaire_editor" style="display:none;margin-top:10px">
+            <div style="font-size:13px;color:var(--color-text-secondary);margin-bottom:8px">意向者需先完成问卷才能表达意向，答案与匹配分将展示给你</div>
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+              <button class="btn btn-ghost" data-open-questionnaire-editor>设计问卷</button>
+              <span data-saved-questionnaire style="display:none;font-size:13px;color:var(--color-brand)"></span>
+            </div>
+          </div>
+        </div>
+        <div class="form-error" data-pub-error style="display:none"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" data-close-publish>取消</button>
+        <button class="btn btn-primary" data-submit-publish>发布</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 问卷编辑器模态框（发布者设计问卷） -->
+  <div class="modal-mask" data-qn-editor-modal style="display:none">
+    <div class="modal" style="max-width:560px">
+      <div class="modal-title">设计筛选问卷（仅单选）</div>
+      <div class="modal-body">
+        <div class="form-item">
+          <label>问卷标题</label>
+          <input class="form-input" data-qn-title placeholder="如：美赛队友筛选" />
+        </div>
+        <div data-qn-questions></div>
+        <div style="margin-top:12px">
+          <button class="btn btn-ghost" data-qn-add-question>+ 添加题目</button>
+        </div>
+        <div class="form-error" data-qn-error style="display:none;margin-top:10px"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" data-qn-cancel>取消</button>
+        <button class="btn btn-primary" data-qn-save>保存问卷</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 填写问卷模态框（意向者填写） -->
+  <div class="modal-mask" data-qn-fill-modal style="display:none">
+    <div class="modal" style="max-width:520px">
+      <div class="modal-title" data-qn-fill-title>填写问卷</div>
+      <div class="modal-body" data-qn-fill-body></div>
+      <div class="modal-footer">
+        <button class="btn" data-qn-fill-cancel>取消</button>
+        <button class="btn btn-primary" data-qn-fill-submit>提交并表达意向</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 意向列表模态框（发布者选人） -->
+  <div class="modal-mask" data-intent-modal style="display:none">
+    <div class="modal">
+      <div class="modal-title" data-intent-title>意向列表</div>
+      <div class="modal-body" data-intent-list></div>
+      <div class="modal-footer">
+        <button class="btn" data-close-intent>关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <footer class="footer">校园搭子 · 知乎黑客松 2026 Demo</footer>
+  <script src="../js/app.js"></script>
+</body>
+</html>

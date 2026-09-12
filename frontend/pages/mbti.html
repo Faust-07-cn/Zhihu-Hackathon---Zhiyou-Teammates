@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>性格画像 · 校园搭子</title>
+  <link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+  <header class="nav">
+    <div class="nav-inner">
+      <a class="logo" href="../index.html">校园<span class="logo-suffix">搭子</span></a>
+      <div class="search">
+        <input type="text" placeholder="搜索课程、话题、搭子…" />
+        <button>搜索</button>
+      </div>
+      <nav class="nav-links">
+        <a href="../index.html">首页</a>
+        <a href="requests.html">搭子广场</a>
+        <a href="forum.html">讨论区</a>
+        <a href="me.html">我的</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="page">
+    <section class="main-col">
+      <!-- 问卷引导 -->
+      <div class="card">
+        <div class="quiz-intro">
+          <h1>MBTI 性格画像</h1>
+          <p>回答 28 道题，建立你的性格画像。匹配时会优先为你推荐<b>性格互补</b>的搭子。</p>
+          <p style="margin-top:6px;font-size:13px">已完成答题？可<a href="me.html" style="color:var(--color-brand)">前往个人主页</a>查看画像。</p>
+        </div>
+
+        <!-- 结果区 -->
+        <div data-quiz-result></div>
+
+        <!-- 题库区 -->
+        <div data-quiz></div>
+
+        <!-- 底部操作 -->
+        <div class="quiz-foot">
+          <button class="btn btn-primary" data-submit-quiz>提交并查看类型</button>
+          <span style="color:var(--color-text-muted);font-size:13px">28 题 · 约 3 分钟</span>
+        </div>
+      </div>
+    </section>
+
+    <aside class="side-col">
+      <!-- 已知 MBTI 直接填写 -->
+      <div class="card">
+        <div class="card-title">我已知自己的 MBTI</div>
+        <div class="card-body">
+          <form class="direct-form" data-direct-form>
+            <input class="direct-input" type="text" placeholder="如 INTJ" maxlength="4" data-direct-input />
+            <button class="btn btn-primary">保存</button>
+          </form>
+          <p style="color:var(--color-text-muted);font-size:12px;margin-top:10px">4 个字母，示例：INTJ、ENFP、ISTP</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">MBTI 四维度</div>
+        <div class="card-body" style="color:var(--color-text-secondary);line-height:1.9">
+          <b style="color:var(--color-text)">E 外倾 / I 内倾</b> — 精力来源<br />
+          <b style="color:var(--color-text)">S 感觉 / N 直觉</b> — 认识世界<br />
+          <b style="color:var(--color-text)">T 思考 / F 情感</b> — 判断事物<br />
+          <b style="color:var(--color-text)">J 判断 / P 知觉</b> — 生活态度
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <footer class="footer">校园搭子 · 知乎黑客松 2026 Demo</footer>
+  <script src="../js/app.js"></script>
+</body>
+</html>

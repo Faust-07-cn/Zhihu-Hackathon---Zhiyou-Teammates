@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>我的 · 校园搭子</title>
+  <link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+  <header class="nav">
+    <div class="nav-inner">
+      <a class="logo" href="../index.html">校园<span class="logo-suffix">搭子</span></a>
+      <div class="search">
+        <input type="text" placeholder="搜索课程、话题、搭子…" />
+        <button>搜索</button>
+      </div>
+      <nav class="nav-links">
+        <a href="../index.html">首页</a>
+        <a href="requests.html">搭子广场</a>
+        <a href="forum.html">讨论区</a>
+        <a href="me.html" class="active">我的</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="page">
+    <!-- 个人名片 + 可信度 -->
+    <section class="main-col">
+      <div class="card">
+        <div class="card-body">
+          <div class="identity-card" data-identity></div>
+        </div>
+      </div>
+
+      <!-- MBTI 画像 -->
+      <div class="card">
+        <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
+          <span>我的性格画像</span>
+          <a href="mbti.html" style="font-size:13px;color:var(--color-brand)">重新测试 →</a>
+        </div>
+        <div class="card-body" data-quiz-result></div>
+      </div>
+
+      <!-- 可信度体系说明 -->
+      <div class="card">
+        <div class="card-title">可信度体系</div>
+        <div class="card-body" style="color:var(--color-text-secondary);line-height:1.8">
+          通过<b style="color:var(--color-text)">搭子信评分</b>与 <b style="color:var(--color-text)">LV 等级</b>降低组队协作成本：
+          <ul style="margin:10px 0 0 18px;list-style:disc">
+            <li>完成任务、获得好评、活跃参与均可提升评分</li>
+            <li>评分越高，更容易匹配到高质量项目搭子</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- 右侧：我的资料 -->
+    <aside class="side-col">
+      <div class="card">
+        <div class="card-title">个人资料</div>
+        <div class="card-body">
+          <div class="form-group">
+            <label class="form-label">我的标签</label>
+            <div class="form-row">
+              <button class="tab active">算法</button>
+              <button class="tab active">数学建模</button>
+              <button class="tab">论文写作</button>
+            </div>
+          </div>
+          <button class="btn btn-primary btn-block">编辑资料</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-body" style="color:var(--color-text-secondary);text-align:center;font-size:13px">
+          （此处后续接入知网登录与用户数据）
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <footer class="footer">校园搭子 · 知乎黑客松 2026 Demo</footer>
+  <script src="../js/app.js"></script>
+</body>
+</html>

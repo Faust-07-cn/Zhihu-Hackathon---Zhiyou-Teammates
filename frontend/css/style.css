@@ -509,16 +509,11 @@ input {
   flex-wrap: wrap;
 }
 
-/* 名片内统一的行块间距（MBTI / 评分徽章） */
+/* 名片内统一的行块间距（性格标签 / 评分徽章） */
 .identity-row {
   display: flex;
   justify-content: center;
   margin-top: 12px;
-}
-
-.tag-mbti {
-  background: rgba(241, 64, 60, 0.08);
-  color: var(--color-accent);
 }
 
 /* 页脚 */

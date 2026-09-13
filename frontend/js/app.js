@@ -667,7 +667,7 @@ function matchCardHTML(r, opts = {}) {
           .join("")}</div>`
       : "";
 
-  const mbtiBadge = d.mbti ? `<span class="tag tag-mbti">MBTI ${d.mbti}</span>` : "";
+  const mbtiBadge = d.mbti ? `<span class="tag">${d.mbti}</span>` : "";
 
   return `
     <div class="partner-card">
@@ -782,7 +782,7 @@ function identityHTML(u) {
     ${u.school ? `<div class="identity-meta">${u.school}</div>` : ""}
     ${u.role ? `<div class="identity-meta">${u.role}</div>` : ""}
     <div class="identity-tags">${(u.tags || []).map((t) => `<span class="tag">${t}</span>`).join("")}</div>
-    ${mbti ? `<div class="identity-row"><span class="tag tag-mbti">MBTI ${mbti}</span></div>` : ""}
+    ${mbti ? `<div class="identity-row"><span class="tag">${mbti}</span></div>` : ""}
     ${
       topics.length
         ? `<div class="identity-tags">${topics.map((t) => `<span class="tag tag-zhihu">知乎 · ${t}</span>`).join("")}</div>`
@@ -1047,6 +1047,37 @@ function showQuizResult(res) {
 /* ---------------- 搭子广场页逻辑 ---------------- */
 const REQ_TYPE_LABEL = { interest: "兴趣搭子", study: "学习搭子", project: "项目搭子" };
 
+// 搭子目的按类型细分，发布与筛选共用同一套预设
+const PURPOSE_BY_TYPE = {
+  interest: ["兴趣交流", "日常陪伴", "运动健身", "游戏开黑", "追剧观影", "音乐演出", "摄影出片", "探店美食", "旅行结伴", "读书分享"],
+  study: ["结伴学习", "结伴自习", "考研搭子", "四六级", "雅思托福", "期末冲刺", "论文写作", "课程作业", "刷题打卡", "早起打卡", "保研交流"],
+  project: ["竞赛组队", "科研项目", "大创项目", "开源协作", "创业合伙", "实习求职", "作品集互评", "路演打磨"],
+};
+// 筛选「全部」类型时展示的去重合集
+const ALL_PURPOSES = [...new Set(Object.values(PURPOSE_BY_TYPE).flat())];
+
+// 渲染目的标签；attr 决定点击时读取的属性名（发布用 data-purpose，筛选用 data-req-purpose）
+function purposeTagsHTML(list, attr) {
+  return (list || []).map((p) => `<span class="purpose-tag" ${attr}="${p}">${p}</span>`).join("");
+}
+
+// 发布模态框：目的随搭子类型变化
+function renderPublishPurposes(type) {
+  const wrap = document.querySelector("[data-pub-purposes]");
+  if (!wrap) return;
+  wrap.innerHTML = purposeTagsHTML(PURPOSE_BY_TYPE[type] || PURPOSE_BY_TYPE.interest, "data-purpose");
+}
+
+// 广场筛选：目的随类型筛选变化，「全部」时展示合集
+function renderFilterPurposes(type) {
+  const wrap = document.querySelector("[data-req-purposes]");
+  if (!wrap) return;
+  // 旧请求曾允许任意类型选择这五项目的，继续提供精确筛选入口。
+  const legacyPurposes = ["竞赛组队", "结伴学习", "考研搭子", "兴趣交流", "日常陪伴"];
+  const purposes = type ? [...new Set([...(PURPOSE_BY_TYPE[type] || []), ...legacyPurposes])] : ALL_PURPOSES;
+  wrap.innerHTML = purposeTagsHTML(purposes, "data-req-purpose");
+}
+
 function renderRequestList(items) {
   const wrap = document.querySelector("[data-request-list]");
   if (!wrap) return;
@@ -1077,7 +1108,7 @@ function renderRequestList(items) {
 
       const purposeBadges = (r.purposes || []).map((p) => `<span class="purpose-badge">${p}</span>`).join("");
       const mbtiBadge = it.detail && it.detail.mbti
-        ? `<span class="tag" style="background:rgba(241,64,60,.08);color:var(--color-accent)">MBTI ${it.detail.mbti}</span>`
+        ? `<span class="tag">${it.detail.mbti}</span>`
         : "";
       return `
     <div class="req-card">
@@ -1223,25 +1254,31 @@ function initRequestsPage() {
     });
   });
 
-  // 类型筛选
+  // 类型筛选：切换类型时同步刷新可选的搭子目的
   document.querySelectorAll("[data-req-type]").forEach((tab) => {
     tab.addEventListener("click", () => {
       document.querySelectorAll("[data-req-type]").forEach((t) => t.classList.remove("active"));
       tab.classList.add("active");
       filter.type = tab.getAttribute("data-req-type");
+      filter.purpose = "";
+      renderFilterPurposes(filter.type);
       loadSquare();
     });
   });
 
-  // 目的筛选（单选）
-  document.querySelectorAll("[data-req-purpose]").forEach((tag) => {
-    tag.addEventListener("click", () => {
-      document.querySelectorAll("[data-req-purpose]").forEach((t) => t.classList.remove("selected"));
+  // 目的筛选（单选）：标签随类型动态渲染，用事件委托绑定
+  renderFilterPurposes(filter.type);
+  const reqPurposesWrap = document.querySelector("[data-req-purposes]");
+  if (reqPurposesWrap) {
+    reqPurposesWrap.addEventListener("click", (e) => {
+      const tag = e.target.closest("[data-req-purpose]");
+      if (!tag) return;
+      reqPurposesWrap.querySelectorAll("[data-req-purpose]").forEach((t) => t.classList.remove("selected"));
       tag.classList.add("selected");
       filter.purpose = tag.getAttribute("data-req-purpose");
       loadSquare();
     });
-  });
+  }
 
   // 广场列表按钮：意向 / 取消意向 / 查看意向
   listWrap.addEventListener("click", (e) => {
@@ -1284,8 +1321,8 @@ function initRequestsPage() {
       document.querySelector("[data-pub-title]").value = "";
       document.querySelector("[data-pub-tags]").value = "";
       document.querySelector("[data-pub-desc]").value = "";
-      document.querySelectorAll("[data-pub-purposes] [data-purpose]").forEach((t) => t.classList.remove("selected"));
-      document.querySelectorAll("[data-pub-types] [data-type]").forEach((c, i) => c.classList.toggle("active", i === 2));
+      document.querySelectorAll("[data-pub-types] [data-type]").forEach((c) => c.classList.toggle("active", c.getAttribute("data-type") === "project"));
+      renderPublishPurposes("project");
       needRadios.forEach((r) => (r.checked = r.value === "false"));
       if (qnEditorArea) qnEditorArea.style.display = "none";
       resetQn();
@@ -1313,14 +1350,18 @@ function initRequestsPage() {
       openQnEditor();
     });
 
+    renderPublishPurposes(document.querySelector("[data-pub-types] [data-type].active")?.getAttribute("data-type") || "interest");
     document.querySelectorAll("[data-pub-types] [data-type]").forEach((card) => {
       card.addEventListener("click", () => {
+        if (card.classList.contains("active")) return;
         document.querySelectorAll("[data-pub-types] [data-type]").forEach((c) => c.classList.remove("active"));
         card.classList.add("active");
+        renderPublishPurposes(card.getAttribute("data-type"));
       });
     });
-    document.querySelectorAll("[data-pub-purposes] [data-purpose]").forEach((tag) => {
-      tag.addEventListener("click", () => tag.classList.toggle("selected"));
+    document.querySelector("[data-pub-purposes]").addEventListener("click", (e) => {
+      const tag = e.target.closest("[data-purpose]");
+      if (tag) tag.classList.toggle("selected");
     });
 
     document.querySelector("[data-submit-publish]").addEventListener("click", () => {

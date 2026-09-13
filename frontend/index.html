@@ -31,11 +31,14 @@
     <!-- 左：内容流 -->
     <section class="main-col">
       <!-- 搭子频道：真实匹配推荐，置顶展示 -->
-      <div class="card" data-home-match style="display:none">
-        <div class="card-title">为你推荐搭子</div>
+      <div class="card" data-home-match>
+        <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+          <span>为你推荐的搭子</span>
+          <a class="btn btn-primary" href="pages/requests.html" style="height:28px;font-size:13px;line-height:28px">发布搭子需求</a>
+        </div>
         <div class="card-body">
           <div data-home-match-list></div>
-          <a class="btn btn-ghost" href="pages/requests.html" style="display:block;text-align:center;margin-top:12px">去搭子广场发布/响应请求 →</a>
+          <a class="btn btn-ghost" href="pages/requests.html" style="display:block;text-align:center;margin-top:12px">去搭子广场响应请求 →</a>
         </div>
       </div>
 
@@ -45,14 +48,6 @@
     <!-- 右：信息栏 -->
     <aside class="side-col">
       <div class="card identity-card" data-identity></div>
-
-      <div class="card">
-        <div class="card-title">给你推荐的搭子</div>
-        <div class="card-body">
-          <div data-partners></div>
-          <a class="btn btn-ghost" href="pages/requests.html" style="display:block;text-align:center;margin-top:12px">去搭子广场 →</a>
-        </div>
-      </div>
 
       <div class="card">
         <div class="card-title">校园热议</div>

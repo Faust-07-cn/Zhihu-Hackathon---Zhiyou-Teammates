@@ -8,7 +8,10 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .routers import mbti, match, requests
+from .routers import mbti, match, posts, requests, users, zhihu
+from .db import init_db
+
+init_db()
 
 app = FastAPI(title="校园搭子 API", version="0.1.0")
 
@@ -24,6 +27,9 @@ app.add_middleware(
 app.include_router(match.router)
 app.include_router(mbti.router)
 app.include_router(requests.router)
+app.include_router(users.router)
+app.include_router(posts.router)
+app.include_router(zhihu.router)
 
 
 @app.get("/")

@@ -5,6 +5,12 @@
 """
 
 from __future__ import annotations
+from .db import persistent
+
+@persistent("questionnaires", ["QUESTIONNAIRES"])
+def _persist_init():
+    if not QUESTIONNAIRES:
+        QUESTIONNAIRES.update({"q01": {"id": "q01", "title": "美赛队友筛选", "request_id": "r01", "questions": []}})
 
 # 问卷库: qid -> 问卷对象
 QUESTIONNAIRES: dict[str, dict] = {}
@@ -40,8 +46,12 @@ def validate_questions(questions: list[dict]) -> tuple[bool, str]:
     若有 expected，必须是合法选项下标列表。返回 (是否合法, 提示)。"""
     if not questions:
         return False, "问卷至少需要 1 道题"
-    for q in questions:
+    seen_ids = set()
+    for pos, q in enumerate(questions, 1):
         text = (q.get("text") or "").strip()
+        if str(q.get("id", pos)) in seen_ids:
+            return False, "题号不能重复"
+        seen_ids.add(str(q.get("id", pos)))
         options = [str(o).strip() for o in (q.get("options") or []) if str(o).strip()]
         if not text:
             return False, "题目不能为空"

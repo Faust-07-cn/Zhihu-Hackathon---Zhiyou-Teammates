@@ -11,8 +11,8 @@
     <div class="nav-inner">
       <a class="logo" href="../index.html">校园<span class="logo-suffix">搭子</span></a>
       <div class="search">
-        <input type="text" placeholder="搜索课程、话题、搭子…" />
-        <button>搜索</button>
+        <input type="text" placeholder="搜索知乎回答、文章…" data-forum-search-input />
+        <button data-forum-search-btn>搜索</button>
       </div>
       <nav class="nav-links">
         <a href="../index.html">首页</a>
@@ -31,8 +31,8 @@
         <div class="card-body" style="display:flex;gap:12px;align-items:center">
           <span class="avatar">浮</span>
           <input type="text" style="flex:1;height:36px;border:1px solid var(--color-border);border-radius:4px;padding:0 12px"
-            placeholder="分享你的学习经验、校园资讯或用AI发起提问…" />
-          <button class="btn btn-primary">提问</button>
+            placeholder="分享你的学习经验、校园资讯，或引用知乎内容发帖…" data-post-draft />
+          <button class="btn btn-primary" data-open-post>发帖</button>
         </div>
       </div>
 
@@ -42,6 +42,12 @@
         <button class="tab" data-channel="课程">课程</button>
         <button class="tab" data-channel="竞赛">竞赛</button>
         <button class="tab" data-channel="生活">生活</button>
+      </div>
+
+      <!-- 知乎搜索结果（顶部搜索触发） -->
+      <div class="card" data-zhihu-results style="display:none">
+        <div class="card-title" data-zhihu-results-title>知乎搜索</div>
+        <div class="card-body" data-zhihu-results-body></div>
       </div>
 
       <div class="card" data-feed></div>
@@ -54,6 +60,50 @@
       </div>
     </aside>
   </main>
+
+  <!-- 发帖模态框（可引用知乎内容） -->
+  <div class="modal-mask" data-post-modal style="display:none">
+    <div class="modal" style="max-width:600px">
+      <div class="modal-title">发帖</div>
+      <div class="modal-body">
+        <div class="form-item">
+          <label>标题</label>
+          <input class="form-input" data-post-title placeholder="一句话说清楚你要分享 / 求助什么" />
+        </div>
+        <div class="form-item">
+          <label>频道</label>
+          <div class="channel-tabs" data-post-channel>
+            <span class="tab active" data-post-channel-val="搭子">搭子</span>
+            <span class="tab" data-post-channel-val="课程">课程</span>
+            <span class="tab" data-post-channel-val="竞赛">竞赛</span>
+            <span class="tab" data-post-channel-val="生活">生活</span>
+          </div>
+        </div>
+        <div class="form-item">
+          <label>正文</label>
+          <textarea class="form-input" data-post-content rows="4" placeholder="写下你的经验、需求或想聊的话题"></textarea>
+        </div>
+        <div class="form-item">
+          <label>标签（逗号分隔）</label>
+          <input class="form-input" data-post-tags placeholder="如：数学建模, 论文写作" />
+        </div>
+        <div class="form-item">
+          <label>引用知乎内容（可选）</label>
+          <div style="display:flex;gap:8px;margin-bottom:8px">
+            <input class="form-input" data-zhihu-ref-query placeholder="搜索知乎回答 / 文章关键词" style="flex:1" />
+            <button class="btn btn-ghost" type="button" data-zhihu-ref-search>搜索</button>
+          </div>
+          <div data-zhihu-ref-results></div>
+          <div data-zhihu-ref-selected style="margin-top:8px"></div>
+        </div>
+        <div class="form-error" data-post-error style="display:none"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" data-close-post>取消</button>
+        <button class="btn btn-primary" data-submit-post>发布</button>
+      </div>
+    </div>
+  </div>
 
   <footer class="footer">校园搭子 · 知乎黑客松 2026 Demo</footer>
   <script src="../js/app.js"></script>

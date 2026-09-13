@@ -67,16 +67,17 @@
               <button class="tab">论文写作</button>
             </div>
           </div>
-          <button class="btn btn-primary btn-block">编辑资料</button>
+          <button class="btn btn-primary btn-block" data-edit-profile>编辑资料</button>
         </div>
       </div>
       <div class="card">
         <div class="card-body" style="color:var(--color-text-secondary);text-align:center;font-size:13px">
-          （此处后续接入知网登录与用户数据）
+          （当前为演示数据；此处后续接入<b style="color:var(--color-text)">知乎 OAuth 登录</b>与用户公开数据）
         </div>
       </div>
     </aside>
   </main>
+  <div class="modal-mask" data-profile-modal style="display:none"><div class="modal"><div class="modal-title">编辑个人资料</div><div class="modal-body"><div class="form-item"><label>标签（逗号分隔）</label><input class="form-input" data-profile-tags></div><div class="form-item"><label>技能（逗号分隔）</label><input class="form-input" data-profile-skills></div><div class="form-item"><label>每周投入时间</label><input class="form-input" type="number" data-profile-hours></div><div class="form-item"><label>合作偏好</label><input class="form-input" data-profile-channel placeholder="线上优先 / 线下优先"></div><p class="form-error" data-profile-error></p></div><div class="modal-footer"><button class="btn" data-profile-close>取消</button><button class="btn btn-primary" data-profile-save>保存</button></div></div></div>
 
   <footer class="footer">校园搭子 · 知乎黑客松 2026 Demo</footer>
   <script src="../js/app.js"></script>

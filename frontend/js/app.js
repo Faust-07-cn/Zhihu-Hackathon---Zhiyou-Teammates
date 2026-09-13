@@ -26,6 +26,45 @@ function api(path, options) {
   });
 }
 
+/* ---------------- 演示账号 ---------------- */
+// 首页与子页面目录层级不同，跳搭子广场需按当前路径拼相对地址
+const SQUARE_URL = window.location.pathname.includes("/pages/") ? "requests.html" : "pages/requests.html";
+
+let _usersPromise = null;
+// 演示用户池只拉一次，供账号切换、身份卡复用
+function loadUsers() {
+  if (!_usersPromise) {
+    _usersPromise = api("/api/users").then((d) => d.items || []).catch(() => []);
+  }
+  return _usersPromise;
+}
+
+function initAccountSwitcher() {
+  const nav = document.querySelector(".nav-links");
+  if (!nav || nav.querySelector("[data-account-switch]")) return;
+  const wrap = document.createElement("label");
+  wrap.className = "account-switch";
+  wrap.innerHTML = `<span class="account-switch-label">演示账号</span>
+    <select data-account-switch title="切换演示账号，用于演示双用户成组流程"></select>`;
+  nav.appendChild(wrap);
+  const sel = wrap.querySelector("select");
+  loadUsers().then((list) => {
+    if (!list.length) {
+      wrap.remove();
+      return;
+    }
+    sel.innerHTML = list
+      .map((u) => `<option value="${u.id}">${u.name} · ${u.school}</option>`)
+      .join("");
+    sel.value = currentUser();
+  });
+  sel.addEventListener("change", () => {
+    localStorage.setItem("currentUserId", sel.value);
+    localStorage.removeItem("userMbti"); // 画像随账号切换，避免不同演示账号串味
+    window.location.reload();
+  });
+}
+
 /* ---------------- 页面切换过渡 ----------------
    点击站内导航时先淡出（page-leaving）再跳转，新页面加载时自动淡入。
    （style.css 中 body 自带 page-in 动画） */
@@ -74,12 +113,6 @@ const MOCK = {
     { text: "校园食堂有哪些隐藏美味？", heat: 854 },
     { text: "考研数学一 136 分经验分享", heat: 720 },
   ],
-  partners: [
-    { name: "阿晚", school: "计算机学院", score: 92, tags: ["算法", "组队"], online: true },
-    { name: "南风", school: "信息学院", score: 88, tags: ["数学建模", "论文"], online: false },
-    { name: "阿澈", school: "设计学院", score: 85, tags: ["UI", "答辩"], online: true },
-    { name: "细雪", school: "外国语学院", score: 80, tags: ["写作", "翻译"], online: false },
-  ],
   feeds: [
     {
       title: "求队伍一起冲击 2026 美赛 M 奖，已有两位队友",
@@ -87,6 +120,8 @@ const MOCK = {
       author: "阿晚",
       school: "计算机学院",
       tags: ["项目搭子", "数学建模", "组队"],
+      channel: "竞赛",
+      request: { match_type: "project", purposes: ["竞赛组队"] },
       likes: 132,
       comments: 46,
       time: "12 分钟前",
@@ -97,6 +132,7 @@ const MOCK = {
       author: "南风",
       school: "信息学院",
       tags: ["课程评价", "学习经验"],
+      channel: "课程",
       likes: 98,
       comments: 23,
       time: "1 小时前",
@@ -107,6 +143,8 @@ const MOCK = {
       author: "阿澈",
       school: "设计学院",
       tags: ["学习搭子", "项目", "前后端"],
+      channel: "搭子",
+      request: { match_type: "project", purposes: ["结伴学习"] },
       likes: 76,
       comments: 31,
       time: "3 小时前",
@@ -117,6 +155,7 @@ const MOCK = {
       author: "细雪",
       school: "外国语学院",
       tags: ["生活资讯", "校园百科"],
+      channel: "生活",
       likes: 210,
       comments: 64,
       time: "5 小时前",
@@ -163,45 +202,474 @@ function renderHotList() {
     .join("");
 }
 
-function renderPartners() {
-  const wrap = document.querySelector("[data-partners]");
-  if (!wrap) return;
-  wrap.innerHTML = MOCK.partners
-    .map(
-      (p) => `
-    <div class="partner-card">
-      <div class="partner-head">
-        <span class="avatar" style="background:${hashColor(p.name)}">${firstName(p.name)}</span>
-        <span class="partner-name">${p.name}</span>
-        <span class="match-score">匹配 ${p.score}%</span>
-      </div>
-      <div style="color:var(--color-text-secondary);font-size:13px">${p.school}${p.online ? " · 🟢 在线" : " · ⚪ 离线"}</div>
-      <div class="partner-tags">${p.tags.map((t) => `<span class="tag">${t}</span>`).join("")}</div>
-      <button class="btn btn-primary" style="height:28px;font-size:13px">发起搭子</button>
-    </div>`
-    )
-    .join("");
+/* ---------------- 讨论区：频道切换 + 帖子转搭子 + 发帖 + 知乎搜索 ---------------- */
+let forumPosts = [];          // 后端拉取的帖子（新帖在前）
+let forumChannel = "all";     // 当前频道（all 表示全部）
+let postRefs = [];            // 发帖时选中的知乎引用
+
+// 从后端拉取帖子列表（GET /api/posts）
+function loadPosts() {
+  return api("/api/posts").then((d) => d.items || []).catch(() => []);
 }
 
-/* 渲染后端匹配结果（GET /api/match/{id}） */
-function renderMatchResults(results, selector = "[data-match-results]") {
+// 知乎站内搜索（GET /api/zhihu/search）；后端缺凭据时返回对齐字段的演示 Mock
+function escapeHTML(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (ch) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  }[ch]));
+}
+
+function safeZhihuURL(value) {
+  try {
+    const url = new URL(value);
+    if (url.protocol === "https:" && !url.username && !url.password &&
+        (url.hostname === "zhihu.com" || url.hostname.endsWith(".zhihu.com"))) return url.href;
+  } catch (_) { /* 不可信链接只展示文本 */ }
+  return "";
+}
+
+const zhihuSearchPending = new Map();
+function zhihuSearch(query, count = 6) {
+  const key = `${count}:${query}`;
+  if (!zhihuSearchPending.has(key)) {
+    const request = api(`/api/zhihu/search?query=${encodeURIComponent(query)}&count=${count}`)
+      .then((res) => {
+        if (!Array.isArray(res.items) || !["mock", "zhihu"].includes(res.source)) throw new Error("搜索响应无效");
+        return res;
+      })
+      .finally(() => zhihuSearchPending.delete(key));
+    zhihuSearchPending.set(key, request);
+  }
+  return zhihuSearchPending.get(key);
+}
+
+function zhihuSourceLabel(res) {
+  if (res.source === "zhihu") return "知乎";
+  const reasons = {
+    missing_credentials: "未配置凭据", auth_failed: "鉴权失败",
+    quota_exceeded: "额度或频率受限", network_error: "上游网络错误", upstream_error: "上游服务异常",
+  };
+  return `演示数据（mock，非真实知乎内容${reasons[res.fallback_reason] ? "；" + reasons[res.fallback_reason] : ""}）`;
+}
+
+// 两个入口复用请求状态；输入变化或关闭时让旧响应失效，不自动重试。
+function bindZhihuSearch(input, btn, body, onState = () => {}) {
+  let version = 0;
+  let pendingQuery = null;
+  const invalidate = () => {
+    version++;
+    pendingQuery = null;
+    btn.disabled = false;
+    body.innerHTML = "";
+  };
+  input.addEventListener("input", invalidate);
+  const run = async () => {
+    const q = input.value.trim();
+    if (!q || pendingQuery === q) return;
+    const id = ++version;
+    pendingQuery = q;
+    btn.disabled = true;
+    onState(q, "搜索中…");
+    body.textContent = "搜索中…";
+    try {
+      const res = await zhihuSearch(q);
+      if (id !== version) return;
+      onState(q, zhihuSourceLabel(res));
+      body.innerHTML = `<div>${escapeHTML(zhihuSourceLabel(res))}</div>` +
+        (res.items.length ? res.items.map((it) => zhihuItemHTML(it, { selectable: true, source: res.source })).join("")
+          : "<div>未找到相关内容</div>");
+    } catch (_) {
+      if (id !== version) return;
+      onState(q, "搜索失败");
+      body.textContent = "搜索失败，请检查网络或后端服务后重试。";
+    } finally {
+      if (id === version) { pendingQuery = null; btn.disabled = false; }
+    }
+  };
+  btn.addEventListener("click", run);
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); run(); }
+  });
+  return invalidate;
+}
+
+// 单条知乎搜索结果；selectable 为 true 时显示「引用」按钮
+function zhihuItemHTML(item, opts = {}) {
+  const source = opts.source === "zhihu" ? "zhihu" : "mock";
+  const url = source === "zhihu" ? safeZhihuURL(item.Url) : "";
+  const title = escapeHTML(item.Title);
+  const btn = opts.selectable
+    ? `<button class="btn btn-ghost zhihu-ref-btn" type="button"
+         data-ref-title="${title}" data-ref-url="${escapeHTML(url)}" data-ref-source="${source}"
+         data-ref-author="${escapeHTML(item.AuthorName)}" data-ref-type="${escapeHTML(item.ContentType)}">引用</button>`
+    : "";
+  return `
+    <div class="zhihu-item">
+      ${url ? `<a class="zhihu-item-title" href="${escapeHTML(url)}" target="_blank" rel="noopener noreferrer">${title}</a>` : `<span class="zhihu-item-title">${title}</span>`}
+      <p class="zhihu-item-text">${escapeHTML(item.ContentText)}</p>
+      <div class="zhihu-item-meta">
+        <span>${escapeHTML(item.AuthorName)}</span><span>·</span><span>${escapeHTML(item.VoteUpCount || 0)} 赞同</span>
+        ${source === "mock" ? "<span>演示数据（mock）</span>" : ""}
+        ${btn}
+      </div>
+    </div>`;
+}
+
+function zhihuRefHTML(ref) {
+  const mock = ref.source !== "zhihu";
+  const title = escapeHTML(ref.title) + (mock ? "（演示数据 mock，非真实知乎内容）" : "");
+  const url = mock ? "" : safeZhihuURL(ref.url);
+  return url ? `<a class="zhihu-ref-link" href="${escapeHTML(url)}" target="_blank" rel="noopener noreferrer">${title}</a>`
+    : `<span class="zhihu-ref-link">${title}</span>`;
+}
+
+function forumFeedHTML(f, idx) {
+  const applyBtn = `<button class="feed-action" data-action="to-request" data-idx="${idx}">转为我的搭子需求</button>`;
+  const refs = (f.zhihu_refs && f.zhihu_refs.length)
+    ? `<div class="zhihu-shared" style="margin-top:10px">
+        <div class="zhihu-shared-head">知乎引用</div>
+        ${f.zhihu_refs.map(zhihuRefHTML).join("")}
+      </div>`
+    : "";
+  return `
+    <article class="feed-item">
+      <div class="feed-meta">
+        <span class="avatar" style="background:${hashColor(f.author)}">${escapeHTML(firstName(f.author))}</span>
+        <span>${escapeHTML(f.author)}</span><span>·</span><span>${escapeHTML(f.school)}</span>
+        <span style="margin-left:auto">${escapeHTML(f.time)}</span>
+      </div>
+      <h3 class="feed-title">${escapeHTML(f.title)}</h3>
+      <p class="feed-excerpt">${escapeHTML(f.excerpt)}</p>
+      ${refs}
+      <div class="feed-tags">${(f.tags || []).map((t) => `<span class="tag">${escapeHTML(t)}</span>`).join("")}</div>
+      <div class="feed-footer">
+        <button class="feed-action" data-action="like" data-post-id="${escapeHTML(f.id)}">赞 ${escapeHTML(f.likes)}</button>
+        <button class="feed-action" data-action="post-detail" data-post-id="${escapeHTML(f.id)}">详情 / 评论 ${escapeHTML(f.comments)}</button>
+        ${applyBtn}
+      </div>
+    </article>`;
+}
+
+// 渲染当前频道可见帖子；把可见列表暴露给「转搭子」按钮取数据
+function renderForumFeed() {
+  const wrap = document.querySelector("[data-feed]");
+  if (!wrap) return;
+  const list = forumChannel === "all"
+    ? forumPosts
+    : forumPosts.filter((f) => f.channel === forumChannel);
+  window.__forumVisible = list;
+  wrap.innerHTML = list.map((f, idx) => forumFeedHTML(f, idx)).join("");
+}
+
+// 渲染发帖时已选中的知乎引用
+function renderZhihuRefs() {
+  const sel = document.querySelector("[data-zhihu-ref-selected]");
+  if (!sel) return;
+  if (!postRefs.length) {
+    sel.innerHTML = "";
+    return;
+  }
+  sel.innerHTML = `
+    <div class="zhihu-shared">
+      <div class="zhihu-shared-head">已选引用</div>
+      ${postRefs.map((r, i) => `
+        <div class="zhihu-ref-picked">
+          <span>${zhihuRefHTML(r)}</span>
+          <button class="btn" type="button" data-remove-ref="${i}" style="margin-left:auto;padding:2px 8px">移除</button>
+        </div>`).join("")}
+    </div>`;
+}
+
+function addPostRef(ref) {
+  if (postRefs.some((r) => r.source === ref.source &&
+      (ref.url ? r.url === ref.url : r.title === ref.title && r.author_name === ref.author_name))) return;
+  postRefs.push(ref);
+  renderZhihuRefs();
+}
+
+function openPostModal() {
+  const modal = document.querySelector("[data-post-modal]");
+  if (!modal) return;
+  renderZhihuRefs();
+  modal.style.display = "flex";
+}
+
+function initForumPage() {
+  const wrap = document.querySelector("[data-feed]");
+  const tabs = Array.from(document.querySelectorAll("[data-channel]"));
+  if (!wrap || !tabs.length) return; // 非讨论区页
+
+  // 频道切换（只绑定顶部 data-channel 标签，发帖模态框用 data-post-channel-val 隔离）
+  tabs.forEach((tab) => {
+    tab.addEventListener("click", () => {
+      tabs.forEach((t) => t.classList.remove("active"));
+      tab.classList.add("active");
+      forumChannel = tab.getAttribute("data-channel");
+      renderForumFeed();
+    });
+  });
+
+  // 帖子列表点击：转搭子 / 引用
+  wrap.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-action='to-request']");
+    if (!btn || btn.disabled) return;
+    const f = (window.__forumVisible || [])[Number(btn.getAttribute("data-idx"))];
+    if (!f) return;
+    createRequestFromPost(f, btn);
+  });
+
+  initPostModal();
+
+  // 拉取后端帖子并渲染
+  wrap.innerHTML = `<div style="padding:20px;color:var(--color-text-secondary);text-align:center">加载中…</div>`;
+  loadPosts().then((items) => {
+    const existing = new Set(forumPosts.map((post) => post.id));
+    forumPosts = [...forumPosts, ...items.filter((post) => !existing.has(post.id))];
+    renderForumFeed();
+  });
+}
+
+// 全站顶部搜索统一进入讨论区；讨论区复用知乎搜索与引用结果。
+function initForumSearch() {
+  const input = document.querySelector(".nav .search input");
+  const btn = document.querySelector(".nav .search button");
+  if (!input || !btn) return;
+  input.placeholder = "搜索知乎回答、文章…";
+  const box = document.querySelector("[data-zhihu-results]");
+  if (!box) {
+    const navigate = () => {
+      const q = input.value.trim();
+      if (!q) return;
+      const forumURL = window.location.pathname.includes("/pages/") ? "forum.html" : "pages/forum.html";
+      window.location.href = `${forumURL}?q=${encodeURIComponent(q)}`;
+    };
+    btn.addEventListener("click", navigate);
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); navigate(); }
+    });
+    return;
+  }
+
+  const body = box.querySelector("[data-zhihu-results-body]");
+  const title = box.querySelector("[data-zhihu-results-title]");
+  bindZhihuSearch(input, btn, body, (q, state) => {
+    box.style.display = "";
+    title.textContent = `知乎搜索 · ${q}（${state}）`;
+  });
+  const query = new URLSearchParams(window.location.search).get("q");
+  if (query && query.trim()) {
+    input.value = query.trim();
+    btn.click();
+  }
+
+  // 顶部搜索结果中的「引用」→ 加入发帖引用池并打开发帖框
+  box.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-ref-title]");
+    if (!b) return;
+    addPostRef({
+      title: b.getAttribute("data-ref-title"),
+      url: b.getAttribute("data-ref-url"),
+      author_name: b.getAttribute("data-ref-author"),
+      content_type: b.getAttribute("data-ref-type"),
+      source: b.getAttribute("data-ref-source"),
+    });
+    openPostModal();
+  });
+}
+
+// 发帖模态框：写帖 + 搜索知乎并引用 + 发布到 /api/posts
+function initPostModal() {
+  const modal = document.querySelector("[data-post-modal]");
+  if (!modal) return;
+  const openBtn = document.querySelector("[data-open-post]");
+
+  let postChannel = "搭子";
+  const channelOpts = Array.from(modal.querySelectorAll("[data-post-channel-val]"));
+  const setChannel = (ch) => {
+    postChannel = ch;
+    channelOpts.forEach((o) =>
+      o.classList.toggle("active", o.getAttribute("data-post-channel-val") === ch));
+  };
+  channelOpts.forEach((o) =>
+    o.addEventListener("click", () => setChannel(o.getAttribute("data-post-channel-val"))));
+
+  if (openBtn) openBtn.addEventListener("click", () => {
+    const draft = document.querySelector("[data-post-draft]");
+    const content = modal.querySelector("[data-post-content]");
+    if (draft && draft.value.trim()) {
+      content.value = content.value ? `${content.value}\n${draft.value}` : draft.value;
+      draft.value = "";
+    }
+    if (forumChannel !== "all") setChannel(forumChannel);
+    openPostModal();
+  });
+
+  // 发帖内「搜索知乎并引用」
+  const refQuery = modal.querySelector("[data-zhihu-ref-query]");
+  const refSearch = modal.querySelector("[data-zhihu-ref-search]");
+  const refResults = modal.querySelector("[data-zhihu-ref-results]");
+  const resetRefSearch = bindZhihuSearch(refQuery, refSearch, refResults);
+  modal.querySelectorAll("[data-close-post]").forEach((b) =>
+    b.addEventListener("click", () => {
+      modal.style.display = "none";
+      resetRefSearch();
+    }));
+  refResults.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-ref-title]");
+    if (!b) return;
+    addPostRef({
+      title: b.getAttribute("data-ref-title"),
+      url: b.getAttribute("data-ref-url"),
+      author_name: b.getAttribute("data-ref-author"),
+      content_type: b.getAttribute("data-ref-type"),
+      source: b.getAttribute("data-ref-source"),
+    });
+  });
+
+  // 移除已选引用
+  const selBox = modal.querySelector("[data-zhihu-ref-selected]");
+  selBox.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-remove-ref]");
+    if (!b) return;
+    postRefs.splice(Number(b.getAttribute("data-remove-ref")), 1);
+    renderZhihuRefs();
+  });
+
+  // 发布
+  modal.querySelector("[data-submit-post]").addEventListener("click", () => {
+    const errBox = modal.querySelector("[data-post-error]");
+    const title = modal.querySelector("[data-post-title]").value.trim();
+    const content = modal.querySelector("[data-post-content]").value.trim();
+    const tags = modal.querySelector("[data-post-tags]").value.split(/[,，]/)
+      .map((s) => s.trim()).filter(Boolean);
+    if (!title) { errBox.textContent = "标题不能为空"; errBox.style.display = ""; return; }
+    if (!content) { errBox.textContent = "正文不能为空"; errBox.style.display = ""; return; }
+    errBox.style.display = "none";
+
+    const submitBtn = modal.querySelector("[data-submit-post]");
+    submitBtn.disabled = true;
+    api("/api/posts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        user_id: currentUser(),
+        title,
+        content,
+        channel: postChannel,
+        tags,
+        zhihu_refs: postRefs,
+      }),
+    })
+      .then((post) => {
+        modal.style.display = "none";
+        resetRefSearch();
+        submitBtn.disabled = false;
+        modal.querySelector("[data-post-title]").value = "";
+        modal.querySelector("[data-post-content]").value = "";
+        modal.querySelector("[data-post-tags]").value = "";
+        refQuery.value = "";
+        refResults.innerHTML = "";
+        postRefs = [];
+        renderZhihuRefs();
+        forumPosts = [post, ...forumPosts.filter((item) => item.id !== post.id)];
+        forumChannel = post.channel;
+        document.querySelectorAll("[data-channel]").forEach((tab) =>
+          tab.classList.toggle("active", tab.getAttribute("data-channel") === forumChannel));
+        renderForumFeed();
+      })
+      .catch((err) => {
+        submitBtn.disabled = false;
+        errBox.textContent = "发布失败：" + err.message;
+        errBox.style.display = "";
+      });
+  });
+}
+
+// 帖子 → 搭子请求：带上帖子主题与需求信息，复用后端发布接口
+function createRequestFromPost(f, btn) {
+  const conv = f.request || { match_type: "interest", purposes: ["兴趣交流"] };
+  if (!confirm("将根据该帖子在搭子广场发起一个搭子需求，确定继续？")) return;
+  btn.disabled = true;
+  api("/api/requests", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      user_id: currentUser(),
+      title: f.title,
+      match_type: conv.match_type,
+      purposes: conv.purposes,
+      tags: f.tags,
+      desc: f.excerpt,
+      requires_questionnaire: false,
+      questionnaire_id: null,
+    }),
+  })
+    .then(() => {
+      window.location.href = SQUARE_URL;
+    })
+    .catch((err) => {
+      btn.disabled = false;
+      alert("发起失败：" + err.message);
+    });
+}
+
+/* 渲染后端匹配结果（GET /api/match/{id}）
+   opts.compact：紧凑模式（首页只展示前 2 条理由、不展开分数拆解） */
+function renderMatchResults(results, selector = "[data-match-results]", opts = {}) {
   const wrap = document.querySelector(selector);
   if (!wrap) return;
   if (!results || !results.length) {
     wrap.innerHTML = `<div style="padding:20px;color:var(--color-text-secondary);text-align:center">暂无匹配结果</div>`;
     return;
   }
-  wrap.innerHTML = results
-    .map((r) => {
-      const c = r.candidate || {};
-      const d = r.detail || {};
-      const purposeBadges = (d.matched_purposes || [])
-        .map((p) => `<span class="purpose-badge">✓ 目的 · ${p}</span>`)
-        .join("");
-      const mbtiBadge = d.mbti
-        ? `<span class="tag" style="background:rgba(241,64,60,.08);color:var(--color-accent)">MBTI ${d.mbti} · 互补 ${d.mbti_score}</span>`
-        : "";
-      return `
+  wrap.innerHTML = results.map((r) => matchCardHTML(r, opts)).join("");
+}
+
+// 单张推荐卡：匹配分拆解 + 推荐理由 + 共同知乎内容 + 发起搭子
+function matchCardHTML(r, opts = {}) {
+  const c = r.candidate || {};
+  const d = r.detail || {};
+  const connect = r.connect || {};
+  const compact = !!opts.compact;
+
+  const purposeBadges = (d.matched_purposes || [])
+    .map((p) => `<span class="purpose-badge">✓ 目的 · ${p}</span>`)
+    .join("");
+
+  // 推荐理由来自后端 detail.reasons，前端不写死
+  const reasons = (d.reasons || []).slice(0, compact ? 2 : 4);
+  const reasonsHTML = reasons.length
+    ? `<ul class="reason-list">${reasons.map((t) => `<li class="reason-line">${t}</li>`).join("")}</ul>`
+    : "";
+
+  // 共同知乎内容：话题 + 创作/收藏
+  const zhihuItems = [
+    ...(d.shared_zhihu_topics || []).map((t) => `<span class="tag tag-zhihu">话题 · ${t}</span>`),
+    ...(d.shared_zhihu_contents || []).map(
+      (it) => `<span class="tag tag-zhihu" title="${it.excerpt || ""}">知乎${it.kind || ""} · ${it.title}</span>`
+    ),
+  ];
+  const zhihuHTML = zhihuItems.length
+    ? `<div class="zhihu-shared">
+        <div class="zhihu-shared-head">共同知乎内容${
+          d.zhihu_source === "mock" ? `<span class="mock-badge">演示数据</span>` : ""
+        }</div>
+        <div class="partner-tags">${zhihuItems.join("")}</div>
+      </div>`
+    : "";
+
+  // 匹配分拆解：让用户看懂分数从哪里来（首页紧凑模式也保留，是「可解释」的核心展示）
+  const breakdown = d.breakdown || [];
+  const breakdownHTML =
+    breakdown.length
+      ? `<div class="breakdown">${breakdown
+          .map((b) => `<span class="breakdown-item">${b.label} <b>${b.score}</b><i>×${b.weight}%</i></span>`)
+          .join("")}</div>`
+      : "";
+
+  const mbtiBadge = d.mbti ? `<span class="tag tag-mbti">MBTI ${d.mbti}</span>` : "";
+
+  return `
     <div class="partner-card">
       <div class="match-head">
         <span class="avatar" style="background:${hashColor(c.name || "?")}">${firstName(c.name || "?")}</span>
@@ -222,60 +690,213 @@ function renderMatchResults(results, selector = "[data-match-results]") {
         ${(c.tags || []).map((t) => `<span class="tag">${t}</span>`).join("")}
         ${mbtiBadge}
       </div>
-      <button class="btn btn-primary" style="height:28px;font-size:13px;width:100%;margin-top:10px">发起搭子</button>
+      ${reasonsHTML}
+      ${zhihuHTML}
+      ${breakdownHTML}
+      ${connectButtonHTML(c, connect)}
     </div>`;
-    })
-    .join("");
+}
+
+// 「发起搭子」按钮：真实调用后端表达意向接口，并区分已发送 / 需问卷 / 无请求三种状态
+function connectButtonHTML(candidate, connect) {
+  const base = `class="btn btn-block" style="margin-top:10px"`;
+  if (connect.has_intent) {
+    return `<button ${base} disabled>已表达意向 ✓ 等待对方接受</button>`;
+  }
+  if (connect.request_id && !connect.requires_questionnaire) {
+    return `<button class="btn btn-primary btn-block" style="margin-top:10px" data-action="connect" data-uid="${candidate.id}">发起搭子</button>`;
+  }
+  if (connect.request_id && connect.requires_questionnaire) {
+    return `<a ${base} href="${SQUARE_URL}">TA 的请求需先填问卷 · 去搭子广场</a>`;
+  }
+  return `<button ${base} disabled>TA 暂无开放请求</button>`;
+}
+
+function bindConnectButtons() {
+  document.body.addEventListener("click", async (e) => {
+    const btn = e.target.closest("[data-action='connect']");
+    if (!btn || btn.disabled) return;
+    const uid = btn.getAttribute("data-uid");
+    const original = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "发送中…";
+    try {
+      const res = await api(`/api/match/${currentUser()}/connect`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ target_user_id: uid }),
+      });
+      if (res.mode === "intent") {
+        btn.textContent = "已表达意向 ✓ 等待对方接受";
+        btn.classList.remove("btn-primary");
+      } else {
+        btn.textContent = original;
+        btn.disabled = false;
+        alert(res.message || "暂时无法发起搭子");
+      }
+    } catch (err) {
+      btn.textContent = original;
+      btn.disabled = false;
+      alert("操作失败：" + err.message);
+    }
+  });
+}
+
+function initProfileEditor() {
+  const modal = document.querySelector("[data-profile-modal]");
+  const open = document.querySelector("[data-edit-profile]");
+  if (!modal || !open) return;
+  const fill = (u) => {
+    modal.querySelector("[data-profile-tags]").value = (u.tags || []).join("，");
+    modal.querySelector("[data-profile-skills]").value = (u.questionnaire?.["技能"] || []).join("，");
+    modal.querySelector("[data-profile-hours]").value = u.availability?.weekly_hours || "";
+    modal.querySelector("[data-profile-channel]").value = u.collab?.channel || "";
+  };
+  open.onclick = () => loadUsers().then((list) => { const u = list.find((x) => x.id === currentUser()); if (u) fill(u); modal.style.display = "flex"; });
+  modal.querySelector("[data-profile-close]").onclick = () => { modal.style.display = "none"; };
+  modal.querySelector("[data-profile-save]").onclick = async () => {
+    const tags = modal.querySelector("[data-profile-tags]").value.split(/[,，]/).map((s) => s.trim()).filter(Boolean);
+    const skills = modal.querySelector("[data-profile-skills]").value.split(/[,，]/).map((s) => s.trim()).filter(Boolean);
+    try { await api(`/api/users/${currentUser()}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tags, availability: { weekly_hours: Number(modal.querySelector("[data-profile-hours]").value) || 0 }, collab: { channel: modal.querySelector("[data-profile-channel]").value.trim() }, questionnaire: { 技能: skills } }) }); _usersPromise = null; modal.style.display = "none"; renderIdentity(); } catch (err) { modal.querySelector("[data-profile-error]").textContent = "保存失败：" + err.message; }
+  };
 }
 
 function renderIdentity() {
   const wrap = document.querySelector("[data-identity]");
   if (!wrap) return;
-  const u = MOCK.user;
-  const myMbti = getMbti();
-  wrap.innerHTML = `
+  wrap.innerHTML = `<div class="match-loading"><div class="spin"></div><div>加载中…</div></div>`;
+  loadUsers().then((list) => {
+    const me = list.find((u) => u.id === currentUser());
+    wrap.innerHTML = identityHTML(me || MOCK.user);
+  });
+}
+
+// 身份卡：展示当前演示账号的真实画像与知乎兴趣
+function identityHTML(u) {
+  const zhihu = u.zhihu || {};
+  const topics = (zhihu.topics || []).slice(0, 4);
+  const mbti = u.mbti || getMbti();
+  return `
     <div class="identity-avatar">${firstName(u.name)}</div>
     <div class="identity-name">${u.name}</div>
-    <div class="identity-meta">${u.school}</div>
-    <div class="identity-meta">${u.role}</div>
-    <div class="identity-tags">${u.tags.map((t) => `<span class="tag">${t}</span>`).join("")}</div>
-    ${myMbti ? `<div class="identity-row"><span class="tag tag-mbti">MBTI ${myMbti}</span></div>` : ""}
+    ${u.school ? `<div class="identity-meta">${u.school}</div>` : ""}
+    ${u.role ? `<div class="identity-meta">${u.role}</div>` : ""}
+    <div class="identity-tags">${(u.tags || []).map((t) => `<span class="tag">${t}</span>`).join("")}</div>
+    ${mbti ? `<div class="identity-row"><span class="tag tag-mbti">MBTI ${mbti}</span></div>` : ""}
+    ${
+      topics.length
+        ? `<div class="identity-tags">${topics.map((t) => `<span class="tag tag-zhihu">知乎 · ${t}</span>`).join("")}</div>`
+        : ""
+    }
+    ${zhihu.source === "mock" ? `<div class="identity-row"><span class="mock-badge">知乎兴趣 · 演示数据</span></div>` : ""}
     <div class="identity-row">
-      <span class="score-badge"><span class="score-num">${u.score}</span> 搭子信评分 · ${u.level}</span>
+      <span class="score-badge"><span class="score-num">${u.score != null ? u.score : "-"}</span> 搭子信评分${
+        u.level ? " · " + u.level : ""
+      }</span>
     </div>
   `;
 }
 
-/* 首页"搭子"频道：加载真实匹配结果（与搭子广场同源） */
+/* 首页推荐搭子：加载真实匹配结果（与「发起搭子」按钮同源） */
 function loadHomeMatchList() {
   const wrap = document.querySelector("[data-home-match-list]");
   if (!wrap) return;
-  api(`/api/match/${currentUser()}?match_type=interest&top_n=5`)
-    .then((data) => renderMatchResults(data.results, "[data-home-match-list]"))
+  wrap.innerHTML = `<div class="match-loading"><div class="spin"></div><div>正在推荐搭子…</div></div>`;
+  api(`/api/match/${currentUser()}?match_type=interest&top_n=4`)
+    .then((data) => renderMatchResults(data.results, "[data-home-match-list]", { compact: true }))
     .catch((err) => {
       wrap.innerHTML = `<div style="padding:16px;color:var(--color-accent)">搭子加载失败：${err.message}</div>`;
     });
 }
 
 function bindLikes() {
-  document.body.addEventListener("click", (e) => {
+  document.body.addEventListener("click", async (e) => {
+    const detail = e.target.closest("[data-action='post-detail']");
+    if (detail) { openPostDetail(detail.getAttribute("data-post-id")); return; }
     const btn = e.target.closest("[data-action='like']");
-    if (!btn) return;
-    const m = btn.textContent.match(/(\d+)/);
-    if (m) btn.textContent = `👍 ${Number(m[1]) + 1}`;
+    if (!btn || btn.disabled) return;
+    const id = btn.getAttribute("data-post-id");
+    if (!id) return;
+    btn.disabled = true;
+    try {
+      const result = await api(`/api/posts/${encodeURIComponent(id)}/like`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: currentUser() }),
+      });
+      const post = forumPosts.find((p) => p.id === id);
+      if (post) post.likes = result.likes;
+      document.querySelectorAll("[data-action='like'][data-post-id]").forEach((button) => {
+        if (button.getAttribute("data-post-id") === id) {
+          button.textContent = `${result.liked ? "已赞" : "赞"} ${result.likes}`;
+          button.setAttribute("aria-pressed", String(result.liked));
+        }
+      });
+    } catch (err) { alert("点赞失败：" + err.message); }
+    finally { btn.disabled = false; }
   });
 }
 
+async function openPostDetail(id) {
+  let modal = document.querySelector("[data-post-detail-modal]");
+  if (!modal) {
+    modal = document.createElement("div");
+    modal.className = "modal-mask";
+    modal.setAttribute("data-post-detail-modal", "");
+    document.body.appendChild(modal);
+  }
+  modal.style.display = "flex";
+  modal.innerHTML = `<div class="modal"><div class="modal-body" data-detail-body>加载中…</div><div class="modal-footer"><button class="btn" data-detail-close>关闭</button></div></div>`;
+  modal.querySelector("[data-detail-close]").onclick = () => { modal.style.display = "none"; };
+  const body = modal.querySelector("[data-detail-body]");
+  try {
+    const data = await api(`/api/posts/${encodeURIComponent(id)}`);
+    const post = data.post;
+    const existing = forumPosts.find((p) => p.id === id);
+    if (existing) Object.assign(existing, post);
+    renderForumFeed();
+    body.innerHTML = `<h2>${escapeHTML(post.title)}</h2>
+      <p>${escapeHTML(post.author)} · ${escapeHTML(post.time)}</p>
+      <div style="white-space:pre-wrap">${escapeHTML(post.excerpt)}</div>
+      ${(post.zhihu_refs || []).map(zhihuRefHTML).join("")}
+      <h3>评论</h3>
+      ${(data.comments || []).map((c) => `<article><b>${escapeHTML(c.author)}</b><p style="white-space:pre-wrap">${escapeHTML(c.content)}</p></article>`).join("") || "暂无评论"}
+      <form data-comment-form><label>发表评论<textarea class="form-input" name="content" required rows="3"></textarea></label>
+      <p data-comment-error role="alert"></p><button class="btn btn-primary" type="submit">提交评论</button></form>`;
+    body.querySelector("[data-comment-form]").onsubmit = async (event) => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const content = form.elements.content.value.trim();
+      if (!content) return;
+      const submit = form.querySelector("button");
+      submit.disabled = true;
+      try {
+        await api(`/api/posts/${encodeURIComponent(id)}/comments`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ user_id: currentUser(), content }),
+        });
+        await openPostDetail(id);
+      } catch (err) {
+        form.querySelector("[data-comment-error]").textContent = "评论失败：" + err.message;
+        submit.disabled = false;
+      }
+    };
+  } catch (err) { body.textContent = "详情加载失败：" + err.message; }
+}
+
 document.addEventListener("DOMContentLoaded", () => {
+  initForumSearch();
   renderFeed(MOCK.feeds);
   renderHotList();
-  renderPartners();   // 先用 Mock 兜底
   renderIdentity();
+  initProfileEditor();
   bindLikes();
+  bindConnectButtons();
+  initAccountSwitcher();
   initMbtiPage();
   initRequestsPage();
   initQuestionnaireModals();
-  loadHomePartners(); // 再异步用真实接口覆盖首页推荐
+  initForumPage();
+  loadHomeMatchList();
 });
 
 /* ---------------- MBTI 问卷页逻辑 ---------------- */
@@ -423,17 +1044,6 @@ function showQuizResult(res) {
   `;
 }
 
-/* ---------------- 首页：真实推荐搭子 ---------------- */
-function loadHomePartners() {
-  const wrap = document.querySelector("[data-partners]");
-  if (!wrap) return;
-  api(`/api/match/${currentUser()}?match_type=interest&top_n=4`)
-    .then((data) => renderMatchResults(data.results, "[data-partners]"))
-    .catch(() => {
-      /* 接口失败时保留 Mock 兜底渲染，不阻塞页面 */
-    });
-}
-
 /* ---------------- 搭子广场页逻辑 ---------------- */
 const REQ_TYPE_LABEL = { interest: "兴趣搭子", study: "学习搭子", project: "项目搭子" };
 
@@ -493,6 +1103,11 @@ function renderRequestList(items) {
         ${(r.tags || []).map((t) => `<span class="tag">${t}</span>`).join("")}
         ${mbtiBadge}
       </div>
+      ${
+        it.detail && it.detail.reasons && it.detail.reasons.length
+          ? `<div class="reason-line">${it.detail.reasons[0]}</div>`
+          : ""
+      }
       <div style="margin-top:12px">${actionBtn}</div>
     </div>`;
     })
@@ -529,7 +1144,17 @@ function renderMyRequests(data) {
       </div>
       ${
         r.status === "open" && r.intent_people && r.intent_people.length
-          ? `<div style="margin-top:10px;font-size:13px;color:var(--color-text-secondary)">意向：${r.intent_people.map((p) => p.name).join("、")}</div>`
+          ? `<div style="margin-top:10px">
+              <div style="font-size:13px;color:var(--color-text-secondary);margin-bottom:6px">收到意向：${r.intent_people
+                .map((p) => p.name)
+                .join("、")}</div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap">${r.intent_people
+                .map(
+                  (p) =>
+                    `<button class="btn btn-primary" style="height:28px;font-size:13px" data-action="accept" data-req="${r.id}" data-uid="${p.id}">接受 ${p.name}</button>`
+                )
+                .join("")}</div>
+            </div>`
           : ""
       }
     </div>`;
@@ -818,10 +1443,32 @@ function initRequestsPage() {
         .then(() => {
           intentModal.style.display = "none";
           loadSquare();
+          loadMine();
         })
         .catch((err) => alert("接受失败：" + err.message));
     });
   }
+
+  // 「我的请求」里直接接受意向，省去回到广场找「查看意向」的步骤
+  myWrap.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-action='accept']");
+    if (!btn || btn.disabled) return;
+    if (!confirm("确定接受 TA 成为你的搭子？")) return;
+    btn.disabled = true;
+    api(`/api/requests/${btn.getAttribute("data-req")}/accept`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: currentUser(), accepted_user_id: btn.getAttribute("data-uid") }),
+    })
+      .then(() => {
+        loadMine();
+        loadSquare();
+      })
+      .catch((err) => {
+        btn.disabled = false;
+        alert("接受失败：" + err.message);
+      });
+  });
 
   loadSquare();
 }
@@ -829,6 +1476,46 @@ function initRequestsPage() {
 /* ---------------- 自定义问卷：编辑器（发布者设计） ---------------- */
 let publishQn = null;   // 发布流程中已保存的问卷 {id, title, questions}
 let fillOnDone = null;  // 填写问卷完成后的回调（刷新广场）
+
+/* ---------------- 竞赛组队问卷模板 ----------------
+   依据建议文档 P1-2：覆盖比赛/项目类型、擅长角色、当前与期望阶段、
+   每周投入、最晚合作时间、队伍规模、跨校/线上偏好。发布者套用后，
+   可再逐题勾选「期望」以启用问卷匹配计分（未勾选则为中性分）。 */
+const COMPETITION_QN_TEMPLATE = {
+  title: "竞赛组队队友筛选",
+  questions: [
+    { id: "1", text: "你想参加的比赛或项目类型？", options: ["数学建模 / 美赛", "程序设计 / 算法", "创新创业 / 挑战杯", "工程实践 / 硬件", "数据分析 / 科研", "其他"], expected: [] },
+    { id: "2", text: "你擅长的角色是？", options: ["产品", "设计", "前端开发", "后端开发", "算法", "运营 / 答辩"], expected: [] },
+    { id: "3", text: "你目前处于哪个阶段？", options: ["有想法，还没起步", "已经组队，缺人", "进行中，需补位", "接近收尾"], expected: [] },
+    { id: "4", text: "你期望加入什么阶段的队伍？", options: ["从零开始", "早期孵化", "中期加速", "已有基础补位"], expected: [] },
+    { id: "5", text: "你每周能投入多少时间？", options: ["5 小时以下", "5~10 小时", "10~20 小时", "20 小时以上"], expected: [] },
+    { id: "6", text: "你最晚能合作到什么时候？", options: ["1 周内", "1 个月内", "3 个月内", "长期不限"], expected: [] },
+    { id: "7", text: "你希望的队伍规模？", options: ["2 人", "3~4 人", "5~6 人", "7 人以上"], expected: [] },
+    { id: "8", text: "是否接受跨校 / 线上合作？", options: ["只接受同校线下", "接受线上", "跨校 + 线上都行"], expected: [] },
+  ],
+};
+
+// 把一组题目渲染进问卷编辑器（供回填与套用模板共用）
+function editorQuestionsHTML(questions) {
+  return questions.map((q, qi) => {
+    const opts = q.options.map((o, oi) => `
+        <div class="qn-option-row">
+          <label class="qn-expected"><input type="checkbox" data-qn-expected ${(q.expected || []).includes(oi) ? "checked" : ""} /> 期望</label>
+          <input class="form-input" data-qn-opt value="${o}" />
+          <button class="btn qn-remove" data-qn-remove-option>×</button>
+        </div>`).join("");
+    return `
+      <div class="qn-block" data-qn-block="${qi}">
+        <div class="qn-block-head">
+          <span class="qn-block-title">题目 ${qi + 1}</span>
+          <button class="btn qn-remove" data-qn-remove-question>删除题目</button>
+        </div>
+        <input class="form-input" data-qn-q-text value="${q.text}" />
+        <div class="qn-options" data-qn-options>${opts}</div>
+        <button class="btn btn-ghost" data-qn-add-option>+ 添加选项</button>
+      </div>`;
+  }).join("");
+}
 
 function qnQuestionBlockHTML(qIndex) {
   return `
@@ -862,24 +1549,7 @@ function openQnEditor() {
   const wrap = document.querySelector("[data-qn-questions]");
   if (publishQn && publishQn.questions && publishQn.questions.length) {
     // 回填已保存问卷，便于修改
-    wrap.innerHTML = publishQn.questions.map((q) => {
-      const opts = q.options.map((o, oi) => `
-        <div class="qn-option-row">
-          <label class="qn-expected"><input type="checkbox" data-qn-expected ${(q.expected || []).includes(oi) ? "checked" : ""} /> 期望</label>
-          <input class="form-input" data-qn-opt value="${o}" />
-          <button class="btn qn-remove" data-qn-remove-option>×</button>
-        </div>`).join("");
-      return `
-        <div class="qn-block" data-qn-block>
-          <div class="qn-block-head">
-            <span class="qn-block-title">题目</span>
-            <button class="btn qn-remove" data-qn-remove-question>删除题目</button>
-          </div>
-          <input class="form-input" data-qn-q-text value="${q.text}" />
-          <div class="qn-options" data-qn-options>${opts}</div>
-          <button class="btn btn-ghost" data-qn-add-option>+ 添加选项</button>
-        </div>`;
-    }).join("");
+    wrap.innerHTML = editorQuestionsHTML(publishQn.questions);
   } else {
     wrap.innerHTML = qnQuestionBlockHTML(0);
   }
@@ -951,6 +1621,20 @@ function initQuestionnaireModals() {
         block.remove();
       }
     });
+
+    // 套用竞赛组队问卷模板：预填 8 道组队关键题，供发布者按需增删与勾选期望
+    const compTmplBtn = document.querySelector("[data-qn-template-comp]");
+    if (compTmplBtn) {
+      compTmplBtn.addEventListener("click", () => {
+        const wrap = document.querySelector("[data-qn-questions]");
+        const hasContent = Array.from(wrap.querySelectorAll("[data-qn-q-text]"))
+          .some((el) => el.value.trim());
+        if (hasContent && !confirm("套用模板将覆盖当前编辑器中的问卷内容，确定继续？")) return;
+        document.querySelector("[data-qn-title]").value = COMPETITION_QN_TEMPLATE.title;
+        wrap.innerHTML = editorQuestionsHTML(COMPETITION_QN_TEMPLATE.questions);
+        document.querySelector("[data-qn-error]").style.display = "none";
+      });
+    }
 
     document.querySelector("[data-qn-save]").addEventListener("click", async () => {
       const data = buildQnFromEditor();

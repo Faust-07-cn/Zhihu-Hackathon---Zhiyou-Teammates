@@ -9,8 +9,20 @@
 const API_BASE = "http://localhost:8001";
 const CURRENT_USER_ID = localStorage.getItem("currentUserId") || "u01";
 
+// 知乎 OAuth 登录态：authUser 非空时全站以知乎身份运行
+let authUser = null;
+
+async function initAuth() {
+  try {
+    const res = await api("/api/auth/me");
+    authUser = res.authenticated ? res.user : null;
+  } catch (_) {
+    authUser = null;
+  }
+}
+
 function currentUser() {
-  return localStorage.getItem("currentUserId") || "u01";
+  return authUser ? authUser.id : (localStorage.getItem("currentUserId") || "u01");
 }
 
 function getMbti() {
@@ -20,7 +32,7 @@ function setMbti(m) {
   localStorage.setItem("userMbti", m);
 }
 function api(path, options) {
-  return fetch(API_BASE + path, options).then((r) => {
+  return fetch(API_BASE + path, Object.assign({ credentials: "include" }, options)).then((r) => {
     if (!r.ok) throw new Error("API " + r.status);
     return r.json();
   });
@@ -41,7 +53,7 @@ function loadUsers() {
 
 function initAccountSwitcher() {
   const nav = document.querySelector(".nav-links");
-  if (!nav || nav.querySelector("[data-account-switch]")) return;
+  if (!nav || authUser || nav.querySelector("[data-account-switch]")) return;
   const wrap = document.createElement("label");
   wrap.className = "account-switch";
   wrap.innerHTML = `<span class="account-switch-label">演示账号</span>
@@ -49,11 +61,12 @@ function initAccountSwitcher() {
   nav.appendChild(wrap);
   const sel = wrap.querySelector("select");
   loadUsers().then((list) => {
-    if (!list.length) {
+    const demo = list.filter((u) => !u.id.startsWith("zhihu_")); // 切换器只显示演示账号池
+    if (!demo.length) {
       wrap.remove();
       return;
     }
-    sel.innerHTML = list
+    sel.innerHTML = demo
       .map((u) => `<option value="${u.id}">${u.name} · ${u.school}</option>`)
       .join("");
     sel.value = currentUser();
@@ -747,35 +760,77 @@ function initProfileEditor() {
   const open = document.querySelector("[data-edit-profile]");
   if (!modal || !open) return;
   const fill = (u) => {
+    const nameInput = modal.querySelector("[data-profile-name]");
+    const schoolInput = modal.querySelector("[data-profile-school]");
+    if (nameInput) nameInput.value = u.name || "";
+    if (schoolInput) schoolInput.value = u.school || "";
     modal.querySelector("[data-profile-tags]").value = (u.tags || []).join("，");
     modal.querySelector("[data-profile-skills]").value = (u.questionnaire?.["技能"] || []).join("，");
     modal.querySelector("[data-profile-hours]").value = u.availability?.weekly_hours || "";
     modal.querySelector("[data-profile-channel]").value = u.collab?.channel || "";
   };
-  open.onclick = () => loadUsers().then((list) => { const u = list.find((x) => x.id === currentUser()); if (u) fill(u); modal.style.display = "flex"; });
+  open.onclick = () => {
+    if (authUser) { fill(authUser); modal.style.display = "flex"; return; } // 登录用户直接预填知乎资料
+    loadUsers().then((list) => { const u = list.find((x) => x.id === currentUser()); if (u) fill(u); modal.style.display = "flex"; });
+  };
   modal.querySelector("[data-profile-close]").onclick = () => { modal.style.display = "none"; };
   modal.querySelector("[data-profile-save]").onclick = async () => {
     const tags = modal.querySelector("[data-profile-tags]").value.split(/[,，]/).map((s) => s.trim()).filter(Boolean);
     const skills = modal.querySelector("[data-profile-skills]").value.split(/[,，]/).map((s) => s.trim()).filter(Boolean);
-    try { await api(`/api/users/${currentUser()}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tags, availability: { weekly_hours: Number(modal.querySelector("[data-profile-hours]").value) || 0 }, collab: { channel: modal.querySelector("[data-profile-channel]").value.trim() }, questionnaire: { 技能: skills } }) }); _usersPromise = null; modal.style.display = "none"; renderIdentity(); } catch (err) { modal.querySelector("[data-profile-error]").textContent = "保存失败：" + err.message; }
+    const payload = {
+      tags,
+      availability: { weekly_hours: Number(modal.querySelector("[data-profile-hours]").value) || 0 },
+      collab: { channel: modal.querySelector("[data-profile-channel]").value.trim() },
+      questionnaire: { 技能: skills },
+    };
+    const nameInput = modal.querySelector("[data-profile-name]");
+    const schoolInput = modal.querySelector("[data-profile-school]");
+    if (nameInput && nameInput.value.trim()) payload.name = nameInput.value.trim();
+    if (schoolInput && schoolInput.value.trim()) payload.school = schoolInput.value.trim();
+    try {
+      const updated = await api(`/api/users/${currentUser()}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      if (authUser) { authUser = updated; } else { _usersPromise = null; }
+      modal.style.display = "none";
+      renderIdentity();
+    } catch (err) { modal.querySelector("[data-profile-error]").textContent = "保存失败：" + err.message; }
   };
 }
 
 function renderIdentity() {
   const wrap = document.querySelector("[data-identity]");
   if (!wrap) return;
+  if (authUser) {
+    // 已登录：身份卡 = 知乎身份 + 完善资料/退出
+    wrap.innerHTML = identityHTML(authUser) + `
+      <div class="identity-row" style="margin-top:12px;display:flex;gap:8px">
+        ${authUser.needs_profile ? `<a class="btn" href="pages/me.html" style="flex:1;text-align:center">完善资料</a>` : ""}
+        <button class="btn btn-ghost" data-zhihu-logout style="flex:1">退出登录</button>
+      </div>`;
+    const logoutBtn = wrap.querySelector("[data-zhihu-logout]");
+    if (logoutBtn) logoutBtn.addEventListener("click", logout);
+    return;
+  }
+  // 未登录：演示身份 + 知乎登录按钮（整页跳转，携带 Referer 供后端推导前端源）
   wrap.innerHTML = `<div class="match-loading"><div class="spin"></div><div>加载中…</div></div>`;
   loadUsers().then((list) => {
     const me = list.find((u) => u.id === currentUser());
-    wrap.innerHTML = identityHTML(me || MOCK.user);
+    const loginHref = `${API_BASE}/api/auth/login?redirect_to=${encodeURIComponent(location.pathname)}`;
+    wrap.innerHTML = identityHTML(me || MOCK.user) + `
+      <a class="btn btn-primary btn-block" href="${loginHref}" style="margin-top:12px">使用知乎账号登录</a>`;
   });
 }
 
-// 身份卡：展示当前演示账号的真实画像与知乎兴趣
+// 身份卡：展示当前账号的真实画像与知乎身份
 function identityHTML(u) {
   const zhihu = u.zhihu || {};
   const topics = (zhihu.topics || []).slice(0, 4);
-  const mbti = u.mbti || getMbti();
+  const mbti = authUser ? u.mbti : (u.mbti || getMbti()); // OAuth 用户不受演示 localStorage 污染
+  const sourceBadge =
+    zhihu.source === "mock"
+      ? `<div class="identity-row"><span class="mock-badge">知乎兴趣 · 演示数据</span></div>`
+      : zhihu.source === "oauth"
+        ? `<div class="identity-row"><span class="tag tag-zhihu">已通过知乎登录</span></div>`
+        : "";
   return `
     <div class="identity-avatar">${firstName(u.name)}</div>
     <div class="identity-name">${u.name}</div>
@@ -788,7 +843,7 @@ function identityHTML(u) {
         ? `<div class="identity-tags">${topics.map((t) => `<span class="tag tag-zhihu">知乎 · ${t}</span>`).join("")}</div>`
         : ""
     }
-    ${zhihu.source === "mock" ? `<div class="identity-row"><span class="mock-badge">知乎兴趣 · 演示数据</span></div>` : ""}
+    ${sourceBadge}
     <div class="identity-row">
       <span class="score-badge"><span class="score-num">${u.score != null ? u.score : "-"}</span> 搭子信评分${
         u.level ? " · " + u.level : ""
@@ -883,7 +938,8 @@ async function openPostDetail(id) {
   } catch (err) { body.textContent = "详情加载失败：" + err.message; }
 }
 
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
+  await initAuth(); // 必须先于所有 currentUser() 调用点
   initForumSearch();
   renderFeed(MOCK.feeds);
   renderHotList();
@@ -897,7 +953,27 @@ document.addEventListener("DOMContentLoaded", () => {
   initQuestionnaireModals();
   initForumPage();
   loadHomeMatchList();
+  handleOAuthFlags();
 });
+
+/* ---------------- 知乎 OAuth 登录态：登出与回调参数处理 ---------------- */
+async function logout() {
+  try { await api("/api/auth/logout", { method: "POST" }); } catch (_) {}
+  authUser = null;
+  window.location.reload();
+}
+
+function handleOAuthFlags() {
+  const q = new URLSearchParams(location.search);
+  if (q.get("oauth") === "error") {
+    alert("知乎登录失败，请重试。");
+    return;
+  }
+  if (q.get("oauth") === "new" && authUser) {
+    const openBtn = document.querySelector("[data-edit-profile]");
+    if (openBtn) openBtn.click(); // 新用户自动打开预填的编辑资料 modal
+  }
+}
 
 /* ---------------- MBTI 问卷页逻辑 ---------------- */
 function initMbtiPage() {

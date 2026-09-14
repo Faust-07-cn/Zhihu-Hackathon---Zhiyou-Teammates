@@ -8,7 +8,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .routers import mbti, match, posts, requests, users, zhihu
+from .routers import auth, mbti, match, posts, requests, users, zhihu
 from .db import init_db
 
 init_db()
@@ -24,6 +24,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth.router)
+app.include_router(auth.zhihu_router)
 app.include_router(match.router)
 app.include_router(mbti.router)
 app.include_router(requests.router)

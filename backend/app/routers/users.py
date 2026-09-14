@@ -25,8 +25,26 @@ class ProfileUpdate(BaseModel):
 
 
 def _public(user: dict) -> dict:
-    profile = zhihu.get_profile(user["id"])
-    meta = profile.get("profile", {})
+    zh_id = user.get("zhihu_identity")
+    if zh_id:
+        # 知乎 OAuth / Mock 登录用户：摘要直接取自登录身份
+        zhihu_summary = {
+            "source": zh_id.get("source", "oauth"),  # "oauth" | "mock"
+            "fullname": zh_id.get("fullname", ""),
+            "headline": zh_id.get("headline", ""),
+            "url": zh_id.get("url", ""),
+            "topics": [],
+        }
+    else:
+        profile = zhihu.get_profile(user["id"])
+        meta = profile.get("profile", {})
+        zhihu_summary = {
+            "source": profile.get("source", ""),
+            "fullname": meta.get("fullname", ""),
+            "headline": meta.get("headline", ""),
+            "url": meta.get("url", ""),
+            "topics": profile.get("topics", []),
+        }
     return {
         "id": user["id"],
         "name": user["name"],
@@ -38,14 +56,8 @@ def _public(user: dict) -> dict:
         "purposes": user.get("purposes", []),
         "availability": user.get("availability", {}),
         "collab": user.get("collab", {}),
-        # 知乎画像摘要（source 为 mock 时前端会标注「演示数据」）
-        "zhihu": {
-            "source": profile.get("source", ""),
-            "fullname": meta.get("fullname", ""),
-            "headline": meta.get("headline", ""),
-            "url": meta.get("url", ""),
-            "topics": profile.get("topics", []),
-        },
+        # 知乎画像摘要（source 为 mock 时前端会标注「演示数据」，oauth 标注「已通过知乎登录」）
+        "zhihu": zhihu_summary,
     }
 
 

@@ -215,20 +215,62 @@ def get_user(user_id: str) -> dict | None:
 
 def set_user_mbti(user_id: str, mbti: str) -> bool:
     """写入用户 MBTI（内存态）。返回是否成功。"""
-    user = get_user(user_id)
+    users_list = _users()
+    user = next((u for u in users_list if u["id"] == user_id), None)
     if not user:
         return False
     user["mbti"] = mbti
-    save("users", _users())
+    save("users", users_list)
     return True
 
 
 def update_user_profile(user_id: str, data: dict) -> dict | None:
-    user = get_user(user_id)
+    users_list = _users()
+    user = next((u for u in users_list if u["id"] == user_id), None)
     if not user:
         return None
     for key in ("name", "school", "tags", "purposes", "availability", "collab", "questionnaire"):
         if key in data:
             user[key] = data[key]
-    save("users", _users())
+    save("users", users_list)
     return user
+
+
+def upsert_user(user_id: str, data: dict) -> tuple[dict, bool]:
+    """知乎 OAuth 登录后自动建档/更新。返回 (user, created)。data 仅覆盖提供的字段。"""
+    import time as _time
+    users_list = _users()
+    user = next((u for u in users_list if u["id"] == user_id), None)
+    if user is None:
+        user = {
+            "id": user_id,
+            "name": data.get("name", user_id),
+            "school": data.get("school", ""),
+            "level": "LV 1",
+            "score": 60,
+            "mbti": None,
+            "purposes": [],
+            "tags": [],
+            "availability": {"weekly_hours": 0, "slots": [], "term": "长期"},
+            "collab": {
+                "channel": "均可",
+                "role": "均可",
+                "reply": "日常",
+                "meeting": "按需",
+                "city": "成都",
+                "campus": "",
+                "online_ok": True,
+            },
+            "questionnaire": {},
+            "zhihu_identity": data.get("zhihu_identity"),
+            "created_at": int(_time.time()),
+        }
+        users_list.append(user)
+        created = True
+    else:
+        for key in ("name", "school", "tags", "zhihu_identity"):
+            if key in data:
+                user[key] = data[key]
+        created = False
+    save("users", users_list)
+    return user, created

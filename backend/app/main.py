@@ -18,7 +18,10 @@ app = FastAPI(title="校园搭子 API", version="0.1.0")
 # 允许前端跨域访问（本地开发：前后端分端口）
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "https://zhiyouteammates.site",
+        "https://www.zhiyouteammates.site",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

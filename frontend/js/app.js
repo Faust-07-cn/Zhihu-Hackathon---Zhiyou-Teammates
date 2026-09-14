@@ -1,6 +1,5 @@
 /* ============================================================
-   校园社交平台 — 共享前端逻辑（骨架阶段）
-   当前使用 MOCK 数据渲染，后续替换为后端 API 调用。
+   校园社交平台 — 共享前端逻辑
    ============================================================ */
 
 "use strict";
@@ -16,7 +15,8 @@ async function initAuth() {
   try {
     const res = await api("/api/auth/me");
     authUser = res.authenticated ? res.user : null;
-  } catch (_) {
+  } catch (error) {
+    console.error("加载登录状态失败", error);
     authUser = null;
   }
 }
@@ -815,7 +815,7 @@ function renderIdentity() {
   loadUsers().then((list) => {
     const me = list.find((u) => u.id === currentUser());
     const loginHref = `${API_BASE}/api/auth/login?redirect_to=${encodeURIComponent(location.pathname)}`;
-    wrap.innerHTML = identityHTML(me || MOCK.user) + `
+    wrap.innerHTML = (me ? identityHTML(me) : `<div class="identity-name">尚未登录</div>`) + `
       <a class="btn btn-primary btn-block" href="${loginHref}" style="margin-top:12px">使用知乎账号登录</a>`;
   });
 }

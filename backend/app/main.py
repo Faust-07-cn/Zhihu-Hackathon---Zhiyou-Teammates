@@ -21,6 +21,7 @@ app.add_middleware(
     allow_origins=[
         "https://zhiyouteammates.site",
         "https://www.zhiyouteammates.site",
+        "https://zhiyouteammates-qawwzpox.edgeone.com",
     ],
     allow_credentials=True,
     allow_methods=["*"],

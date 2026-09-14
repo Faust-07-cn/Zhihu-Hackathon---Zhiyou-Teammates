@@ -6,7 +6,7 @@
 "use strict";
 
 /* ---------------- 全局配置 ---------------- */
-const API_BASE = "http://localhost:8001";
+const API_BASE = "https://api.zhiyouteammates.site";
 const CURRENT_USER_ID = localStorage.getItem("currentUserId") || "u01";
 
 // 知乎 OAuth 登录态：authUser 非空时全站以知乎身份运行
